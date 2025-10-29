@@ -121,103 +121,80 @@ def add_business_rule(rule_text: str):
 @app.post("/ask")
 def ask_question(data: Question):
     try:
-        # 0️⃣ Yönetim Komutu Kontrolü (Tamamen Doğru)
-        if data.query.lower().startswith("bilgiekle:"):
+        if data.query.startswith("bilgiekle:"):
             query_text = data.query[len("bilgiekle:"):].strip()
             if not query_text:
+                # Eğer komut kullanılmış ama metin girilmemişse uyarı dön
                 return {"status": "error", "response": "Hata: 'bilgiekle:' komutundan sonra eklenecek bir metin girilmelidir."}
-            return add_business_rule(query_text) # add_business_rule başarılı/hatalı JSON dönmeli
+            return add_business_rule(query_text)
 
         # 1️⃣ Kullanıcı mesajını DB'ye kaydet
         save_conversation(data.user_id, "user", data.query)
 
         # 2️⃣ Geçmiş mesajları al
-        # Geçmiş 5 dakikadan eski mesajları silme mantığı doğru, limit=10 iyi bir değer.
         history = get_conversation_history(data.user_id, limit=10)
 
-        # 3️⃣ Vektör Hazırlığı
+        # 3️⃣ Kullanıcı sorgusunu embedding'e çevir ve ilk 100 boyutu al
         query_embedding = embedding_model.encode(data.query)
         query_embedding_100 = query_embedding[:100]
         vec_str = "(" + ",".join(map(str, query_embedding_100)) + ")"
 
-        # 4️⃣ RAG: Endpoint ve İş Kuralı Araması
-
-        # a) Endpoint Araması (Açıklama, Parametre ve Endpoint'i al)
+        # 4️⃣ En yakın endpointleri Cube ile ara
         cur.execute("""
             SELECT module, service, method, endpoint, description, parameters
             FROM api_endpoints
             ORDER BY cube_distance(embedding, CUBE(%s)) ASC
             LIMIT 2
         """, (vec_str,))
-        endpoint_matches = cur.fetchall()
+        matches = cur.fetchall()
+        endpoint_message = {
+            "role": "system",
+            "content": f"En uygun endpointler: {[m[3] for m in matches]}"
+        }
 
-        # b) İş Kuralı Araması (Sadece kural metnini al)
+
+        # 5️⃣ System rolü mesajı
+        system_message = {
+            "role": "system",
+            "content": """
+            Sen Boyut Bilgisayar şirketinin Nervus programı için görev yapan bir kurumsal asistansın. Kurallar dışında bir mesaj gelirse yetkin olmadığını belirt.
+
+            Kurallar:
+            1. Gizli veya kişisel verileri paylaşma.
+            2. Her zaman güvenli ve şirket politikalarına uygun yanıt ver.
+            3. Çıktı eğer endpoint dönecekise daima json formatında olmalı
+            4. Eğer endpoint döneceksen cevabını JSON formatında döndür
+            JSON FORMATI:
+            {"resonse":"mesaj","system":"systemebilgi","bilgiiste":"endpoint varsa true","endpointlist":"" #En uygun endpointler}
+            """
+        }
+
+        
+
+        #dbdeki oluşturduğum bilgilerden bilgi
         cur.execute("""
             SELECT rule_text
             FROM business_rules
             ORDER BY cube_distance(embedding, CUBE(%s)) ASC
             LIMIT 2
         """, (vec_str,))
-        rule_matches = cur.fetchall()
-        
-        # 5️⃣ Konteksleri Formatlama ve Birleştirme (Tek ve Güçlü SYSTEM Prompt'u İçin)
+        mylearnmatches = cur.fetchall()
+        systemhelper_message = {
+            "role": "system",
+            "content":
+            f"""Aşağıdaki veritabanımdan çektiğim bilgilerden bulduğum bilgilere göre doğru yanıtı üret. 
+            BULUNAN BİLGİLER: {[m[0] for m in mylearnmatches]}
+            """
+        }
 
-        # Endpoint Konteksi (Zengin Bilgi)
-        endpoint_context = "\n---\n".join([
-            f"Endpoint: {m[3]} | Metod: {m[2]} | Modül: {m[0]}\nAçıklama: {m[4]}\nParametreler: {m[5]}"
-            for m in endpoint_matches
-        ]) or "Kullanıcı sorusuyla alakalı bir API uç noktası bulunamadı."
-        
-        # İş Kuralı Konteksi (Doğrudan Kural Metinleri)
-        #rule_context = "\n- ".join([m[0] for m in rule_matches])
-        rule_context_list = [m[0] for m in rule_matches]
-        rule_context = ""
-        if rule_context_list:
-            # Kayıtları numaralandırarak (Kayıt 1, Kayıt 2, ...) daha net bir yapı oluşturuyoruz
-            for i, rule_text in enumerate(rule_context_list):
-                rule_context += f"Kayıt {i + 1}: {rule_text.strip()}\n" # Yeni satır ve Kayıt X: başlığı eklenir
-        else:
-            rule_context = "Kullanıcı sorusuyla alakalı bir iş kuralı bulunamadı."
-
-
-        # 6️⃣ Tek, Güçlü ve Düzgün JSON Formatı Zorlayan System Prompt'u Oluşturma
-        system_content = f"""
-Sen Boyut Bilgisayar şirketinin Nervus programı için görev yapan bir kurumsal asistanssın. 
-Çıktı daima **Türkçe** olmalı ve sadece tek bir **JSON** nesnesi döndürmelisin. 
-Cevap üretirken SADECE aşağıdaki [KONTEKS BİLGİLERİ] bölümlerindeki bilgilere dayan. Başka bir bilgi kullanma.
-
-[JSON ÇIKTI ZORUNLU KURALLARI]
-1.  Gizli veya kişisel verileri paylaşma.
-2.  Kurallar dışında bir mesaj gelirse yetkin olmadığını belirt.
-3.  Cevabını aşağıdaki JSON formatında döndür:
-4.  Eğer kullanıcının sorusu bir API ucuyla (endpoint) cevaplanabilecek **net bir veri sorgusu** ise:
-    a. **bilgiiste** değerini **true** yap.
-    b. **endpoint** alanına, [API ENDPOINT KONTEKS] kısmından **sadece en alakalı ve tek bir endpoint'in path'ini** (Örn: /api/siparis/giris) string olarak yaz.
-5.  Eğer soru sadece bir süreç veya kural bilgisi gerektiriyorsa:
-    a. **bilgiiste** değerini **false** yap.
-    b. **endpoint** alanını **boş string ("")** veya **null** yap.
-    c. İş süreci bilgi tabanı referansından yararlanırken kullanıcının cevabına en uygun kayıttan cevap oluşturup ver
-    
-JSON FORMATI:
-{{"response":"Yanıtın mesaj kısmı.","system_debug":"Bulunan konteks bilgiyi özetle (İngilizce).","bilgiiste":{bool(endpoint_matches)},"endpoint":"{[m[3] for m in endpoint_matches]}"}}
-
-[KONTEKS BİLGİLERİ - YALNIZCA BURAYI KULLAN]
-
---- API ENDPOINT KONTEKS REFERANSI ---
-{endpoint_context}
---- İŞ SÜRECİ/BİLGİ TABANI REFERANSI ---
-{rule_context}
-"""
-        system_message = {"role": "system", "content": system_content}
-        
-        # 7️⃣ Tüm mesajları birleştir (SADECE TEK SYSTEM MESAJI + GEÇMİŞ)
-        messages = [system_message] + history 
+        # 6️⃣ Tüm mesajları birleştir
+        messages = [system_message] + [endpoint_message] + [systemhelper_message] + history 
 
         print(f"ollamaya gönderecek mesaj:{messages}")
         print("---------------------------------------------------------")
-        
-        # 8️⃣ Ollama GPT-OSS çağrısı
+        # 7️⃣ Ollama GPT-OSS çağrısı
         response = ollama.chat(
+            #model='gpt-oss:latest',
             model='llama3.1:latest',
             messages=messages
         )
@@ -225,12 +202,7 @@ JSON FORMATI:
         print("---------------------------------------------------------")
         
         assistant_text = response["message"]["content"]
-        
-        # 9️⃣ Yanıtı DB'ye kaydet (API çağrısı ve JSON işlemeyi kaldırdım, sadece yanıtı döndürdüm)
-        # Bu kısım daha sonra Ajan mantığı olarak ayrı bir fonksiyonda ele alınmalıdır.
-        save_conversation(data.user_id, "assistant", assistant_text)
-
-        return {"answer": assistant_text}
+        return assistant_text
         api_data = None
         try:
             parsed = json.loads(assistant_text)
