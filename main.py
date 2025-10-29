@@ -184,7 +184,7 @@ def ask_question(data: Question):
         system_content = f"""
 Sen Boyut Bilgisayar şirketinin Nervus programı için görev yapan bir kurumsal asistanssın. 
 Çıktı daima **Türkçe** olmalı ve sadece tek bir **JSON** nesnesi döndürmelisin. 
-Cevap üretirken SADECE aşağıdaki [KONTEKS BİLGİLERİ] bölümlerindeki bilgilere dayan. Başka bir bilgi kullanma.
+Cevap üretirken SADECE aşağıdaki [KONTEKS BİLGİLERİ] bölümlerindeki en uygun bilgiye dayan. Başka bir bilgi kullanma.
 
 [JSON ÇIKTI ZORUNLU KURALLARI]
 1.  Gizli veya kişisel verileri paylaşma.
@@ -196,8 +196,7 @@ Cevap üretirken SADECE aşağıdaki [KONTEKS BİLGİLERİ] bölümlerindeki bil
 5.  Eğer soru sadece bir süreç veya kural bilgisi gerektiriyorsa:
     a. **bilgiiste** değerini **false** yap.
     b. **endpoint** alanını **boş string ("")** veya **null** yap.
-    c. İş süreci bilgi tabanı referansından yararlanırken kullanıcının cevabına en uygun kayıttan cevap oluşturup ver
-    
+    c. İş süreci bilgi tabanı referansından yararlanırken, **verilen cevabın yalnızca kullanıcının SADECE son sorusuna en uygun kayıttan oluşmasını sağla**. Eğer çekilen bir kayıt (Kayıt X) birden fazla farklı konuyu içeriyorsa, **sadece alakalı olan cümleyi seç ve diğer cümleleri yoksay.**
 JSON FORMATI:
 {{"response":"Yanıtın mesaj kısmı.","system_debug":"Bulunan konteks bilgiyi özetle (İngilizce).","bilgiiste":{bool(endpoint_matches)},"endpoint":"{[m[3] for m in endpoint_matches]}"}}
 
@@ -231,6 +230,8 @@ JSON FORMATI:
         save_conversation(data.user_id, "assistant", assistant_text)
 
         return {"answer": assistant_text}
+    
+        ##buradan aşağısı şuan işlemiyor ama endpoint varsa bilgi çek gibi düşündüm
         api_data = None
         try:
             parsed = json.loads(assistant_text)
@@ -309,3 +310,6 @@ JSON FORMATI:
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+#İş süreci bilgi tabanı referansından yararlanırken kullanıcının cevabına en uygun kayıttan cevap oluşturup ver
