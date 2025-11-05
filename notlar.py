@@ -179,3 +179,270 @@ falcon3:10b	6.3GB
 aya:8b		4.8GB
 aya:35b-23-q2_K	14GB
 
+==================================================================================
+ollama alternatif
+KoboldCPP ve llama.cpp 
+
+https://huggingface.co/ modeller buradan indirilecek
+
+
+git clone https://github.com/ggerganov/llama.cpp
+cd llama.cpp
+mkdir build && cd build
+cmake .. -DLLAMA_CUBLAS=ON
+cmake --build . --config Release
+cd ..
+
+modeli çalıştırmak için
+./main -m ./gpt-oss-20b.Q3_K_M.gguf -p "Merhaba, nasılsın?"
+
+⚙️ 2️⃣ Kurulum
+pip install llama-cpp-python --upgrade
+
+
+CUDA (GPU hızlandırma) kullanmak istiyorsan:
+
+pip install llama-cpp-python[cuda]
+
+
+Eğer Windows’taysan, Visual Studio C++ Redistributable yüklü olmalı.
+
+🧠 3️⃣ Basit örnek (tek prompt)
+from llama_cpp import Llama
+
+llm = Llama(
+    model_path="gpt-oss-20b.Q3_K_M.gguf",
+    n_gpu_layers=50,       # GPU'da kaç katman çalışacak
+    n_ctx=2048,            # context uzunluğu
+    n_threads=6,           # CPU thread sayısı
+    temperature=0.7,       # rastgelelik
+    top_p=0.9              # nucleus sampling
+)
+
+response = llm("Merhaba, nasılsın?", max_tokens=200)
+print(response["choices"][0]["text"])
+
+💬 4️⃣ Chat tarzı (system / user / assistant) mesajları
+from llama_cpp import Llama
+
+llm = Llama(model_path="gpt-oss-20b.Q3_K_M.gguf", n_gpu_layers=50)
+
+messages = [
+    {"role": "system", "content": "Sen nazik ve kısa yanıtlar veren bir asistansın."},
+    {"role": "user", "content": "Bana uzay hakkında kısa bir bilgi ver."}
+]
+
+response = llm.create_chat_completion(
+    messages=messages,
+    temperature=0.7,
+    top_p=0.9,
+    max_tokens=256,
+    stop=["</s>"]  # İsteğe bağlı durdurucu
+)
+
+print(response["choices"][0]["message"]["content"])
+
+
+💡 Bu format, OpenAI Chat API ile birebir aynıdır.
+Yani eğer daha önce openai.ChatCompletion.create() kullandıysan, aynı şekilde çalışır.
+
+⚙️ 5️⃣ Desteklenen parametreler
+Parametre	Açıklama
+model_path	GGUF model dosya yolu
+n_ctx	Context uzunluğu (örnek: 2048, 4096)
+n_threads	CPU thread sayısı
+n_gpu_layers	GPU'da kaç katman yüklenecek (örnek: 50–70 RTX2060 için)
+temperature	Rastgelelik (0.0 → deterministik, 1.0 → yaratıcı)
+top_p	Nucleus sampling
+top_k	K olasılık filtresi
+repeat_penalty	Tekrar eden kelimeleri cezalandırma katsayısı
+max_tokens	Üretilen maksimum token sayısı
+stop	Durdurma dizileri listesi
+stream	True ise çıktıyı token token döner (canlı akış)
+🔄 6️⃣ Stream (canlı çıktı) örneği
+for token in llm.create_chat_completion(
+    messages=[
+        {"role": "system", "content": "Kısa ve samimi cevaplar ver."},
+        {"role": "user", "content": "Python neden popüler?"}
+    ],
+    temperature=0.7,
+    stream=True
+):
+    print(token["choices"][0]["delta"].get("content", ""), end="", flush=True)
+
+
+Canlı akışlı çıktı verir (terminalde kelime kelime yazar).
+
+💡 7️⃣ Kullanışlı ayarlar (RTX 2060 için önerilen)
+llm = Llama(
+    model_path="gpt-oss-20b.Q3_K_M.gguf",
+    n_gpu_layers=50,    # RTX 2060: genelde 50-60 arası optimum
+    n_threads=6,
+    n_ctx=2048,
+    temperature=0.7,
+    top_p=0.9,
+    repeat_penalty=1.1
+)
+
+🧩 8️⃣ JSON biçiminde çıktı almak istersen
+response = llm.create_chat_completion(
+    messages=[
+        {"role": "system", "content": "Her zaman JSON formatında yanıt ver."},
+        {"role": "user", "content": "Kedi hakkında kısa bilgi ver."}
+    ],
+    temperature=0.2
+)
+
+print(response["choices"][0]["message"]["content"])
+
+🔚 Özet
+
+✅ llama.cpp Python API → OpenAI Chat API’ye çok benzer
+✅ System / User / Assistant destekli
+✅ GPU hızlandırmalı (CUDA, Metal, Vulkan)
+✅ Stream, JSON, sıcaklık, top_p, top_k, stop gibi tüm parametreler kullanılabilir
+
+
+=========================================================
+=========================================================
+
+
+
+git büyük dosyalar indirirken hata verirse
+cd C:\llama_cpp\models\gpt-oss-20b\gpt-oss-20b-GGUF
+git lfs pull
+git lfs fetch --all
+git lfs checkout
+
+
+bu mesaj sorar
+llama-cli.exe -m models\Qwen3-14B-Q4_K_M.gguf -p "Merhaba nasılsın?"    
+
+buda server olarak başlatır
+llama-server.exe -m models\Qwen3-14B-Q4_K_M.gguf --host 127.0.0.1 --port 8080
+
+
+pip install llama-cpp-python --upgrade
+pip uninstall llama-cpp-python -y
+pip install llama-cpp-python[cuda] --upgrade   --cuda destekli
+pip install llama-cpp-python --force-reinstall --upgrade --extra-index-url https://jllllll.github.io/llama-cpp-python-cu124
+
+-------------------
+pip uninstall llama-cpp-python -y   
+
+python -m pip install llama-cpp-python==0.1.62 --prefer-binary --extra-index-url=https://jllllll.github.io/llama-cpp-python-cuBLAS-wheels/AVX/cu121
+
+pip show llama-cpp-python   
+----------------------
+
+
+from llama_cpp import Llama
+
+llm = Llama(
+      model_path="C:\\llama_cpp\\models\\Qwen3-14B.Q3_K_M.gguf",
+      n_gpu_layers=20,   # GPU’ya kaç katman yüklenecek
+      n_ctx=4096,        # maksimum context (token penceresi)
+      n_threads=6,       # işlemci çekirdek sayısı
+      verbose=True       # log detaylarını göster
+  )
+# response = llm(
+#           prompt="Merhaba! Nasılsın?",
+#           max_tokens=200,
+#           temperature=0.7,
+#           top_p=0.9,
+#           stop=["User:", "Assistant:"]
+#       )
+
+
+response = llm.create_chat_completion(
+    messages=messages,
+    max_tokens=200,
+    temperature=0.7,
+    top_p=0.9
+)
+assistant_text = response["choices"][0]["message"]["content"]
+⚙️ 3️⃣ Önemli parametreler
+Parametre	Açıklama
+model_path	GGUF dosyasının yolu
+n_ctx	Maksimum token sayısı (örneğin 4096)
+n_gpu_layers	GPU'ya taşınacak katman sayısı
+temperature	Rastgelelik derecesi (0.7 önerilir)
+top_p	Nucleus sampling oranı
+max_tokens	Yanıtın maksimum uzunluğu
+repeat_penalty	Tekrar eden kelimeleri bastırır
+
+
+=========================================================
+=========================================================
+ALTER USER postgres WITH PASSWORD 'yeni_parola';
+
+
+POSTGRE SQL YEDEK ALMA VE VERSİYOM DÜŞÜRME
+backup alma
+pg_dumpall.exe -U postgres -f "d:\PostgreSQL\full_backup02112025.sql"
+
+
+=========================================================
+=========================================================
+PGVECTOR Kurulum
+
+Windows
+Ensure C++ support in Visual Studio is installed and run x64 Native Tools Command Prompt for VS [version] as administrator. Then use nmake to build:
+
+set "PGROOT=C:\Program Files\PostgreSQL\18"
+cd %TEMP%
+git clone --branch v0.8.1 https://github.com/pgvector/pgvector.git
+cd pgvector
+nmake /F Makefile.win
+nmake /F Makefile.win install
+
+CREATE EXTENSION vector;
+
+Create a vector column with 3 dimensions
+
+CREATE TABLE items (id bigserial PRIMARY KEY, embedding vector(3));
+Insert vectors
+
+INSERT INTO items (embedding) VALUES ('[1,2,3]'), ('[4,5,6]');
+Get the nearest neighbors by L2 distance
+
+SELECT * FROM items ORDER BY embedding <-> '[3,1,2]' LIMIT 5;
+
+
+
+CREATE TABLE api_endpoints (
+    id SERIAL PRIMARY KEY,
+    module TEXT,
+    service TEXT,
+    method TEXT,
+    endpoint TEXT,
+    description TEXT,
+    parameters TEXT[],
+    embedding VECTOR(384),
+    elementtypeid BIGINT,
+    menuid BIGINT
+);
+
+CREATE TABLE business_rules (
+    id SERIAL PRIMARY KEY,
+    rule_text TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT now(),
+    embedding VECTOR(384)
+);
+
+
+ALTER TABLE api_endpoints
+ADD CONSTRAINT unique_endpoint UNIQUE (endpoint);
+
+
+2️⃣ Distance operatörü doğru mu?
+
+pgvector’da <-> → Euclidean distance
+
+<#> → Cosine distance
+
+<=> → Inner product
+
+Eğer semantic search yapıyorsan genelde cosine distance (<#>) daha tutarlı sonuç verir.
+=========================================================
+=========================================================

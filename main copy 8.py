@@ -27,7 +27,7 @@ app = FastAPI(title="Boyut Bilgisayar Kurumsal Asistan")
 # PostgreSQL bağlantısı
 # ------------------------------
 DB_HOST = "localhost"
-DB_NAME = "postgres"
+DB_NAME = "ollamadb"
 DB_USER = "postgres"
 DB_PASSWORD = "sql123"
 DB_PORT = 5432
@@ -67,34 +67,27 @@ class Question(BaseModel):
 # Conversation history fonksiyonları
 # ------------------------------
 def save_conversation(user_id, role, message_text):
-    try:
-        cur.execute("""
-            INSERT INTO conversation_history (user_id, message_role, message_text)
-            VALUES (%s, %s, %s)
-        """, (user_id, role, message_text))
-        conn.commit()
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+    cur.execute("""
+        INSERT INTO conversation_history (user_id, message_role, message_text)
+        VALUES (%s, %s, %s)
+    """, (user_id, role, message_text))
+    conn.commit()
 
 def get_conversation_history(user_id, limit=3):
-    try:
-        cur.execute("""
-            SELECT message_role, message_text
-            FROM conversation_history
-            WHERE user_id=%s AND 
-                message_text IS NOT NULL AND 
-                message_text <> '' AND
-                created_at >= NOW() - interval '30 seconds' 
-            ORDER BY created_at ASC
-            LIMIT %s
-        """, (user_id, limit))
-        rows = cur.fetchall()
-        #return [{"role": r[0], "content": r[1]} for r in reversed(rows)]
-        return [{"role": r[0], "content": r[1]} for r in rows]
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+    cur.execute("""
+        SELECT message_role, message_text
+        FROM conversation_history
+        WHERE user_id=%s AND 
+            message_text IS NOT NULL AND 
+            message_text <> '' AND
+            created_at >= NOW() - interval '30 seconds' 
+        ORDER BY created_at ASC
+        LIMIT %s
+    """, (user_id, limit))
+    rows = cur.fetchall()
+    #return [{"role": r[0], "content": r[1]} for r in reversed(rows)]
+    return [{"role": r[0], "content": r[1]} for r in rows]
+
 # ------------------------------
 # Endpoint ekleme
 # ------------------------------
@@ -102,12 +95,12 @@ def get_conversation_history(user_id, limit=3):
 def add_endpoint(data: Endpoint):
     try:
         embedding = embedding_model.encode(data.description)
-        
-        embedding_str = "[" + ",".join(map(str, embedding)) + "]"
+        embedding_100 = embedding[:100]  # Cube max 100 boyut max 384
+        vec_str = "(" + ",".join(map(str, embedding_100)) + ")"
 
         cur.execute("""
             INSERT INTO api_endpoints (module, service, method, endpoint, description, parameters, embedding,elementtypeid,menuid)
-            VALUES (%s, %s, %s, %s, %s, %s, %s::vector,%s,%s)
+            VALUES (%s, %s, %s, %s, %s, %s, CUBE(%s),%s,%s)
         """, (
             data.module,
             data.service,
@@ -115,14 +108,13 @@ def add_endpoint(data: Endpoint):
             data.endpoint,
             data.description,
             data.parameters,
-            embedding_str,
+            vec_str,
             data.elementtypeid,
             data.menuid
         ))
         conn.commit()
         return {"status": "success", "endpoint": data.endpoint}
     except Exception as e:
-        conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
     
 # Varsayımsal Python Kodu (FastAPI/Psycopg2 kullanılarak)
@@ -130,18 +122,18 @@ def add_business_rule(rule_text: str):
     try:
         # 1. Metni Vektörleştirme
         embedding = embedding_model.encode(rule_text)
-        embedding_str = "[" + ",".join(map(str, embedding)) + "]"
+        embedding_100 = embedding[:100]#384 max
+        vec_str = "(" + ",".join(map(str, embedding_100)) + ")"
         
         # 2. Veritabanına Kaydetme
         cur.execute("""
             INSERT INTO business_rules (rule_text, embedding)
-            VALUES (%s, %s::vector)
-        """, (rule_text, embedding_str))
+            VALUES (%s, CUBE(%s))
+        """, (rule_text, vec_str))
         conn.commit()
         
         return {"status": "success", "eklenenbilgi": rule_text}
     except Exception as e:
-        conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 # ------------------------------
 # Kullanıcı sorusu
@@ -166,38 +158,36 @@ def ask_question(data: Question):
 
         # 3️⃣ Vektör Hazırlığı
         query_embedding = embedding_model.encode(data.query)
-        embedding_str = "[" + ",".join(map(str, query_embedding)) + "]"
+        query_embedding_100 = query_embedding[:100]#384 olabilir ama hata verir
+        vec_str = "(" + ",".join(map(str, query_embedding_100)) + ")"
 
         # 4️⃣ RAG: Endpoint ve İş Kuralı Araması
+
+        # a) Endpoint Araması (Açıklama, Parametre ve Endpoint'i al)
         cur.execute("""
-                SELECT 
-                    ae.module, ae.service, ae.method, ae.endpoint,
-                    ae.description, ae.parameters,
-                    ae.embedding <#> %s::vector AS dist,
-                    ae.elementtypeid AS "elementtype"
-                FROM api_endpoints ae
-                WHERE ae.elementtypeid IN (
-                    SELECT id FROM elementtype WHERE aktif=1
-                )
-                ORDER BY dist ASC
-                LIMIT 4
-            """, (embedding_str,))
+            SELECT ae.module, ae.service, ae.method, ae.endpoint, ae.description, 
+                   ae.parameters, cube_distance(ae.embedding, CUBE(%s)) AS dist,
+                   ae.elementtypeid as "elementtype"
+            FROM api_endpoints ae
+            left join elementtype e on e.id = ae.elementtypeid  and e.aktif=1
+            ORDER BY dist ASC
+            LIMIT 2
+        """, (vec_str,))
         endpoint_matches = cur.fetchall()
 
         # b) İş Kuralı Araması (Sadece kural metnini al)
         cur.execute("""
-            SELECT rule_text,  
-                   embedding <-> %s::vector AS dist
+            SELECT rule_text,  cube_distance(embedding, CUBE(%s)) as dist
             FROM business_rules
             ORDER BY dist ASC
             LIMIT 2
-        """, (embedding_str,))
+        """, (vec_str,))
         rule_matches = cur.fetchall()
         
         # 5️⃣ Konteksleri Formatlama ve Birleştirme (Tek ve Güçlü SYSTEM Prompt'u İçin)
 
         # Endpoint Konteksi (Zengin Bilgi)
-        endpoint_filtered = [m for m in endpoint_matches if m[6] ];#< 0.6
+        endpoint_filtered = [m for m in endpoint_matches if m[-1] ];#< 0.6
         endpoint_context = ""
         if not endpoint_filtered:
             endpoint_context = "Kullanıcı sorusuyla alakalı bir API uç noktası bulunamadı."
@@ -246,14 +236,14 @@ Eğer kullanıcı bir liste istiyorsa:
         
         # 7️⃣ Tüm mesajları birleştir (SADECE TEK SYSTEM MESAJI + GEÇMİŞ)
         messages = [system_message] + history 
-        #return endpoint_context;
+
         #print(f"ollamaya gönderecek mesaj:{messages}")
         bitis = time.time()
         gecen_sure = bitis - baslangic
         print(f"Geçen süre: {gecen_sure:.3f} saniye ({gecen_sure*1000:.0f} milisaniye)")
         print("-----------------------------------")
         print(f"Endpointler:{endpoint_context}")
-        print(f"Rehber:{rule_context}")
+        print(f"Roller:{rule_context}")
         print("---------------------------------------------------------")
         print(f"HİSTORY:{history}")
         ("---------------------------------------------------------")
