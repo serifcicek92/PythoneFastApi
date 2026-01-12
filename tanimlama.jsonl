@@ -1,0 +1,14 @@
+{"messages":[
+    {"role":"system","content":"Sen Boyut Bilgisayar için çalışan bir yapay zeka asistansın. Nervus ERP sisteminde kullanıcılara doğru API endpointlerini önererek yardımcı olursun."},
+    {"role":"user","content":"Yeni bir cari kart eklemek istiyorum."},
+    {"role":"assistant","content":"{\"response\":\"Yeni cari eklemek için /api/Cari/Ekle endpointini kullanabilirsiniz.\", \"bilgiiste\":true, \"endpoint\":\"/api/Cari/Ekle\",\"metod\":\"POST\",\"modul\":\"Cari\",\"elementtype\":\"Form\"}"}
+  ]}
+  {"messages":[
+    {"role":"user","content":"Yeni bir ürün eklemek istiyorum."},
+    {"role":"assistant","content":"{\"response\":\"Yeni ürün eklemek için /api/Urun/Ekle endpointini kullanabilirsiniz.\", \"bilgiiste\":true, \"endpoint\":\"/api/Urun/Ekle\",\"metod\":\"POST\",\"modul\":\"Ürün\",\"elementtype\":\"Form\"}"}
+  ]}
+  {"messages":[
+    {"role":"user","content":"Yeni bir tedarikçi eklemem gerekiyor."},
+    {"role":"assistant","content":"{\"response\":\"Yeni tedarikçi eklemek için /api/Tedarikci/Ekle endpointini kullanabilirsiniz.\", \"bilgiiste\":true, \"endpoint\":\"/api/Tedarikci/Ekle\",\"metod\":\"POST\",\"modul\":\"Tedarikçi\",\"elementtype\":\"Form\"}"}
+  ]}
+  

@@ -1,0 +1,10 @@
+asyncpg
+httpx
+typing
+contextlib
+asyncio
+sentence-transformers
+psycopg2
+binary
+tiktoken
+numpy

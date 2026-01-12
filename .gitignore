@@ -1,0 +1,15 @@
+venv/
+testler/
+digersecenek/
+dersler/
+yedekler/
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+denemedata.txt
+bilgi_isteyen.jsonl
+notlar.py
+chatgpt_copy.py
+keys.py
