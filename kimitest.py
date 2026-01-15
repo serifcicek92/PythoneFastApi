@@ -1,7 +1,7 @@
 #pythonCopyimport openai
 import openai
 # Set your API credentials (Moonshot/Kimi API)
-openai.api_key = "sk-bCux42svTFzzUgBkzEQsXmzmsGbt7HfXRGtXE4PhEEK1CMQR"               # use your Kimi API key
+openai.api_key = KEy               # use your Kimi API key
 openai.api_base = "https://api.moonshot.ai/v1"         # Moonshot API endpoint
 
 # Define a simple chat prompt

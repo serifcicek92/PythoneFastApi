@@ -57,7 +57,8 @@ class Endpoint(BaseModel):
     description: str
     parameters: list
     elementtypeid: int
-    menuid: int
+    menuid: int,
+    explain: str
 
 class Question(BaseModel):
     user_id: str
@@ -124,8 +125,8 @@ def add_endpoint(data: Endpoint):
             }
 
         cur.execute("""
-            INSERT INTO api_endpoints (module, service, method, endpoint, description, parameters, embedding,elementtypeid,menuid)
-            VALUES (%s, %s, %s, %s, %s, %s, %s::vector,%s,%s)
+            INSERT INTO api_endpoints (module, service, method, endpoint, description, parameters, embedding,elementtypeid,menuid,explain)
+            VALUES (%s, %s, %s, %s, %s, %s, %s::vector,%s,%s,%s)
         """, (
             data.module,
             data.service,
@@ -135,7 +136,8 @@ def add_endpoint(data: Endpoint):
             data.parameters,
             embedding_str,
             data.elementtypeid,
-            data.menuid
+            data.menuid,
+            data.explain
         ))
         conn.commit()
         return {"status": "success", "endpoint": data.endpoint}
@@ -230,7 +232,8 @@ def ask_question(data: Question):
                     ae.module, ae.service, ae.method, ae.endpoint,
                     ae.description, ae.parameters,
                     ae.embedding <#> %s::vector AS dist,
-                    ae.elementtypeid AS "elementtype"
+                    ae.elementtypeid AS "elementtype",
+                    ae.explain as "explain"
                 FROM api_endpoints ae
                 WHERE ae.elementtypeid IN (
                     SELECT id FROM elementtype WHERE aktif=1
@@ -256,7 +259,7 @@ def ask_question(data: Question):
             endpoint_context = "Kullanıcı sorusuyla alakalı bir API uç noktası bulunamadı."
         else:
             endpoint_context = "\n---\n".join([
-                f"Endpoint: {m[3]} | Metod: {m[2]} | Modül: {m[0]} | Elementtype: {m[7]}\nAçıklama: {m[4]}\nParametreler: {m[5]}"
+                f"Endpoint: {m[3]} | Metod: {m[2]} | Modül: {m[0]} | Elementtype: {m[7]}\nAçıklama: {m[4]}\n{m[8]}\nParametreler: {m[5]}"
                 for m in endpoint_matches
             ]) or "Kullanıcı sorusuyla alakalı bir API uç noktası (endpoint) bulunamadı."
         #print(f"endpointcontex : {endpoint_context}")
