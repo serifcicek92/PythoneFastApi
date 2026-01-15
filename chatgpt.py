@@ -57,7 +57,7 @@ class Endpoint(BaseModel):
     description: str
     parameters: list
     elementtypeid: int
-    menuid: int,
+    menuid: int
     explain: str
 
 class Question(BaseModel):
