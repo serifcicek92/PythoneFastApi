@@ -5,11 +5,11 @@ import os
 import psycopg2
 import json
 import re
-import ollama
+#import ollama
 import requests  # Swagger API çağrısı için
 import time
-from llama_cpp import Llama
-from openai import OpenAI
+#from llama_cpp import Llama
+from openai import RateLimitError, OpenAI
 
 
 try:
@@ -89,11 +89,12 @@ def get_conversation_history(user_id, user_name, limit=3):
                 user_name=%s AND 
                 message_text IS NOT NULL AND 
                 message_text <> '' AND
-                created_at >= NOW() - interval '30 seconds' 
+                created_at >= NOW() - interval '60 seconds' 
             ORDER BY created_at desc
             LIMIT %s
         """, (user_id, user_name, limit))
         rows = cur.fetchall()
+        rows.reverse()
         #return [{"role": r[0], "content": r[1]} for r in reversed(rows)]
         return [{"role": r[0], "content": r[1]} for r in rows]
     except Exception as e:
@@ -216,7 +217,7 @@ def ask_question(data: Question):
         save_conversation(data.user_id, "user", data.query,data.user_name,data.user_company)
 
         # 2️⃣ Geçmiş mesajları al
-        history = get_conversation_history(data.user_id, data.user_name, limit=1)
+        history = get_conversation_history(data.user_id, data.user_name, limit=5)
 
         print(f"====================================================================================")
         print(f"history:{history}")
@@ -285,17 +286,17 @@ def ask_question(data: Question):
 
         # 6️⃣ Tek, Güçlü ve Düzgün JSON Formatı Zorlayan System Prompt'u Oluşturma
         system_content = f"""
-Sen Boyut Bilgisayar adına nervus programı için görev yapan bir yapay zeka asistanısın.
+Sen Boyut Bilgisayar adına nervus programı için görev yapan bir yapay zeka asistanısın. verdiğin yanıtlarda system_debug keyinde olanları sistem işliyor response olanlar kullanıcıya gösteriliyor.
 
 Vereceğin cevaplar her zaman {{"response":"Yanıtın mesaj kısmı.","system_debug":"sisteme vermek istediğin mesaj varsa","bilgiiste":**true/false**,"endpoint":"...", "metod":"...","modul":"...","elementtype":"..."}} şeklinde yanlızca json formatında olmalı. Chat için bir mesajın varsa **response** keyinin value kısmına yaz.
 
 Eğer kullanıcının sorduğu soru aşağıda vereceğim [REHBER] olarak belirttiğim listedeki bir kayıt ile eşleşirse onu Json içinde dön bu kayıtlardan referans al.
 
 Eğer kullanıcı bir liste istiyorsa:
--[ENDPOINTLER] olarak belirttiğim listede bir endpoint varsa endpointi hiçbirşekilde değiştirmeden jsondaki endpoint keyine value olarak yaz.Kesinlike endpointi Büyük/küçük harf veya kelime değiştirme olduğu gibi kalsın. Mesajın varsa response keyine olduğu gibi yaz. Elementtype kısmınıda elementtype keyine olduğu gibi yaz değiştirme
+-[ENDPOINTLER] olarak belirttiğim listede bir endpoint varsa endpointi hiçbirşekilde değiştirmeden jsondaki endpoint keyine value olarak yaz.Kesinlike endpointi Büyük/küçük harf veya kelime değiştirme olduğu gibi kalsın. Kullanıcıya mesajın varsa response keyine yaz.  Kullanıcıya kullanıcıya endpoint gibi sistemsel bilgileri yazma. Kullanıcıya sadece açıklama yaz. Eğer sisteme mesajın varsa system_debug keyine yaz. Elementtype kısmınıda elementtype keyine olduğu gibi yaz değiştirme
 -Ben senin bu gönderdiğin endpoint ile data çekip göstereceğim.
 -Eğer endpoint var ise bilgiiste keyi true olacak.
--Gündelik sohbet konularında cevap ver ama rehberde yoksa ve gündelik sohbet dışında ise Üzgünüm bu konuda cevap veremiyorum. Başka nasıl yardımcı olabilirim. şeklinde cevap ver
+-Gündelik sohbet konularında cevap ver ama rehberde yoksa ve gündelik sohbet dışında ise Üzgünüm bu konuda cevap veremiyorum. Başka nasıl yardımcı olabilirim. şeklinde cevap ver.
 
 --- [ENDPOINTLER]  ---
 {endpoint_context}
@@ -325,28 +326,37 @@ Eğer kullanıcı bir liste istiyorsa:
         ("---------------------------------------------------------")
         #print(f"System mesajı:{messages}")
         baslangic = time.time()
-        client = OpenAI(api_key=OPENAI_KEY)
-        # 8️⃣ chatgpt çağrısı
-        response = client.responses.create(
-            model="gpt-4.1-mini",
-            input = messages
-        )
-        
-        bitis = time.time()
-        gecen_sure = bitis - baslangic
-        print(f"Model Geçen süre: {gecen_sure:.3f} saniye ({gecen_sure*1000:.0f} milisaniye)")
-        #print("--------------------------------")
-        #print(f"dönen:{response}")
-        #print("---------------------------------------------------------")
-        
-        assistant_text = response.output_text.strip()
-        print(f"assistant_text={assistant_text}")
-        # 9️⃣ Yanıtı DB'ye kaydet (API çağrısı ve JSON işlemeyi kaldırdım, sadece yanıtı döndürdüm)
-        # Bu kısım daha sonra Ajan mantığı olarak ayrı bir fonksiyonda ele alınmalıdır.
-        save_conversation(data.user_id, "assistant", assistant_text,data.user_name, data.user_company)
+        try:
+            client = OpenAI(api_key=OPENAI_KEY)
+            # 8️⃣ chatgpt çağrısı
+            response = client.responses.create(
+                model="gpt-4.1-mini",
+                #model="gpt-4o-mini",
+                #model="gpt-4o",
 
-        return {"answer": assistant_text}
-    
+                input = messages
+            )
+            
+            bitis = time.time()
+            gecen_sure = bitis - baslangic
+            print(f"Model Geçen süre: {gecen_sure:.3f} saniye ({gecen_sure*1000:.0f} milisaniye)")
+            #print("--------------------------------")
+            #print(f"dönen:{response}")
+            #print("---------------------------------------------------------")
+            
+            assistant_text = response.output_text.strip()
+            print(f"assistant_text={assistant_text}")
+            # 9️⃣ Yanıtı DB'ye kaydet (API çağrısı ve JSON işlemeyi kaldırdım, sadece yanıtı döndürdüm)
+            # Bu kısım daha sonra Ajan mantığı olarak ayrı bir fonksiyonda ele alınmalıdır.
+            save_conversation(data.user_id, "assistant", assistant_text,data.user_name, data.user_company)
+
+            return {"answer": assistant_text}
+        except RateLimitError as e:
+            print(f"Rate limit hatası: {e}")
+            return {
+                "answer": "İşlem limiti doldu. Lütfen daha sonra tekrar deneyin."
+            }
+
         ##buradan aşağısı şuan işlemiyor ama endpoint varsa bilgi çek gibi düşündüm
         api_data = None
         try:
