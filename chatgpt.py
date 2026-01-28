@@ -327,6 +327,36 @@ Eğer kullanıcı bir liste istiyorsa:
         #print(f"System mesajı:{messages}")
         baslangic = time.time()
         try:
+            #yenisi baslangic
+            client = OpenAI(base_url="https://openrouter.ai/api/v1",api_key=OPENAI_KEY)
+            response = client.chat.completions.create(
+              #model="openai/gpt-oss-120b:free",
+              model="tngtech/deepseek-r1t2-chimera:free",
+              #model="qwen/qwen3-coder:free",
+              #model="nousresearch/hermes-3-llama-3.1-405b:free",
+              messages=messages,
+              extra_body={"reasoning": {"enabled": True}}
+             )
+
+            bitis = time.time()
+            gecen_sure = bitis - baslangic
+            print(f"Model Geçen süre: {gecen_sure:.3f} saniye ({gecen_sure*1000:.0f} milisaniye)")
+            response = response.choices[0].message
+            assistant_text = response.content.replace("```json", "").replace("```", "").strip()
+            print(f"dönen string{assistant_text}")
+            save_conversation(data.user_id, "assistant", assistant_text,data.user_name, data.user_company)
+            
+            return {"answer": assistant_text}
+                    
+            #yenisi bitis.
+        except RateLimitError as e:
+            print(f"Rate limit hatası: {e}")
+            return {
+                "answer": "İşlem limiti doldu. Lütfen daha sonra tekrar deneyin."
+            }
+
+        
+        try:
             client = OpenAI(api_key=OPENAI_KEY)
             # 8️⃣ chatgpt çağrısı
             response = client.responses.create(
